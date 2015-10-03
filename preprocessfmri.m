@@ -433,7 +433,7 @@ if ~exist('fmriqualityparams','var') || isempty(fmriqualityparams)
   fmriqualityparams = {[] [] []};
 end
 if ~exist('fieldmaptimeinterp','var') || isempty(fieldmaptimeinterp)
-  fieldmaptimeinterp = 'cubic';
+  fieldmaptimeinterp = 'pchip'; %fieldmaptimeinterp = 'cubic';
 end
 if ~exist('mcmask','var') || isempty(mcmask)
   mcmask = [];
@@ -727,10 +727,10 @@ if wantundistort
       tmp1 = tempname; tmp2 = tempname;
       
       % make a complex fieldmap and save to tmp1
-      save_untouch_nii(make_ana(fieldmapbrains{p} .* exp(j*fieldmaps{p}),fieldmapsizes{p},[],32),tmp1);
+      save_untouch_nii(make_ana(fieldmapbrains{p} .* exp(j*fieldmaps{p}),fieldmapsizes{p},[],16),tmp1);
       
       % use prelude to unwrap, saving to tmp2
-      unix_wrapper(sprintf('prelude -c %s -o %s %s; gunzip %s.nii.gz',tmp1,tmp2,fieldmapunwrap{p},tmp2));
+      unix_wrapper(sprintf('fsl5.0-prelude -c %s -o %s %s; gunzip %s.nii.gz',tmp1,tmp2,fieldmapunwrap{p},tmp2));
       
       % load in the unwrapped fieldmap
       temp = load_nii(sprintf('%s.nii',tmp2));  % OLD: temp = readFileNifti(tmp2);
@@ -833,11 +833,11 @@ if wantundistort
         if isscalar(fn)
           finalfieldmaps{p} = single(smoothfieldmaps{fn});
         
-        % if two-element vector, do the interpolation, resulting in X x Y x Z x T     [[OUCH. THIS DOUBLES THE MEMORY USAGE]]
-        else
+        % if two-element vector, do the interpolation, resulting in X x Y x Z x T     [[OUCH. THIS DOUBLES THE MEMORY USAGE. TAKES A SHIT LOAD OF TIME..]]
+        else % This combines all fieldmaps into a "run time-series", then runs interp on inter-run intervals to get an fMRI type image
           finalfieldmaps{p} = single(permute(interp1(fieldmaptimes,permute(catcell(4,smoothfieldmaps),[4 1 2 3]), ...
                                                      linspace(fn(1),fn(2),size(epis{p},4)),fieldmaptimeinterp,'extrap'),[2 3 4 1]));
-        end
+        end % To see a vid, run : for i=1:1:335, figure(1); hold off; imagesc(finalfieldmaps{p}(:,:,10,i)); title(sprintf('Slice %d',i)); colorbar; caxis([-15 15]); pause(0.1);  end;
         
       end
     end
