@@ -43,8 +43,8 @@ else
   fprintf('\n');
 end
 
-fprintf('***** Please verify that the above files are correct.  We will proceed in 60 seconds. *****\n\n');
-pause(60);
+fprintf('***** Please verify that the above files are correct.  We will proceed in 2 second. *****\n\n');
+pause(2);
 
 reportmemoryandtime;
 
@@ -105,6 +105,13 @@ for p=1:length(epifilenames)
       %   rp is the ASSET/ARC acceleration factor in the phase-encode dimension
       %   acq is the acquisition matrix size (freq x phase)
       eval(ni.hdr.hist.descrip);  % this should define [ec, rp, acq]
+      
+      % Samir edit: if you find zeros in the acq field, use []
+      if exist('acq','var')
+        if acq(2) ==0 && acq(1) == 0,
+          acq = feval(@(x) x(1:2),size(epis{p}));
+        end
+      end
 
       % this should be [A B] where A and B are the in-plane frequency-encode
       % and phase-encode matrix sizes, respectively.  can be [] in which case 
@@ -145,15 +152,44 @@ reportmemoryandtime;
 fprintf('loading fieldmap data...');
 fieldmaps = {}; fieldmapsizes = {}; fieldmapbrains = {};
 for p=1:length(fieldmapB0files)
+  % Get the B0 file
   ni = load_untouch_nii(gunziptemp(fieldmapB0files{p}));
   fieldmaps{p} = double(ni.img) * pi / (1/(fieldmapdeltate/1000)/2) ;  % convert to range [-pi,pi]
   fieldmapsizes{p} = ni.hdr.dime.pixdim(2:4);
+  
+  % Get the MAG file
   ni = load_untouch_nii(gunziptemp(fieldmapMAGfiles{p}));
   fieldmapbrains{p} = double(ni.img(:,:,:,1));  % JUST USE FIRST VOLUME
   clear ni;
+  clear xx;
 end
 fprintf('done (loading fieldmap data).\n');
 
+reportmemoryandtime;
+
+% Reorient the fieldmaps to match the epi and inplane volumes
+% If the vars exist..
+if exist('fieldmaporient','var') && exist('fieldmappermute','var'),
+  % And if there are any fieldmaps available..
+  if(length(fieldmaporient) >=1)
+    if length(fieldmaporient) ~= 3,
+      error('The fieldmaporient field should be a 3-vector of zeros/ones indicating which dims to flip. E.g., [0 1 0] to flip y')
+    end
+    for p=1:length(fieldmapB0files)
+      xx = fieldmaps{p};
+      xx = flipdims(xx,fieldmaporient);
+      xx = permute(xx, fieldmappermute);
+      fieldmaps{p} = xx;
+      
+      xx = fieldmapbrains{p};
+      xx = flipdims(xx,fieldmaporient);
+      xx = permute(xx, fieldmappermute);
+      fieldmapbrains{p} = xx;
+    end
+  end
+end
+
+fprintf('done (flipping fieldmap dimensions).\n');
 reportmemoryandtime;
 
 % deal with upsampling
@@ -168,7 +204,7 @@ if ~isempty(fieldmapslicefactor)
   end
   for p=1:length(fieldmaps)
     fieldmaps{p} = upsamplematrix(fieldmaps{p},[1 1 fieldmapslicefactor],[],[],'nearest');
-    fieldmapbrains{p} = upsamplematrix(fieldmapbrains{p},[1 1 fieldmapslicefactor],[],[],'nearest');
+    fieldmapbrains{p} = upsamplematrix(fieldmapbrains{p},[1 1 fieldmapslicefactor],[],[],'nearest');    
     fieldmapsizes{p}(3) = fieldmapsizes{p}(3) / fieldmapslicefactor;
   end
 end
