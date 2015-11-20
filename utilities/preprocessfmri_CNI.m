@@ -203,9 +203,38 @@ if ~isempty(fieldmapslicefactor)
     fieldmapsizes = repmat(fieldmapsizes,[1 length(fieldmaps)]);  % make full just to make life easier
   end
   for p=1:length(fieldmaps)
-    fieldmaps{p} = upsamplematrix(fieldmaps{p},[1 1 fieldmapslicefactor],[],[],'nearest');
-    fieldmapbrains{p} = upsamplematrix(fieldmapbrains{p},[1 1 fieldmapslicefactor],[],[],'nearest');    
-    fieldmapsizes{p}(3) = fieldmapsizes{p}(3) / fieldmapslicefactor;
+    if(fieldmapslicefactor == 1),
+      % THIS IS A HACK FOR THE FULL RES FIELDMAP..
+      % The fieldmap has the same number of slices but has 2x the volume
+      % thickness. So have to select the middle slices and then upsample
+      % them to the total number of slices.
+      vols = size(fieldmaps{p},3);
+      if mod(vols,2) ~= 0,
+        % NOTE : If you get here, and you don't know what you are doing. Do
+        % not use fieldmaps. It's not the end of the world...
+        error('ERROR : You used a high res fieldmap and also somehow managed to collect an odd number of fMRI slices. WHY!!!');
+      end
+      
+      vstart = floor(vols/4);
+      vend = floor(3*vols/4);
+      % Could drop either start or end. Don't really care...
+      if(vend-vstart+1 > vols/2),
+        vstart = vstart + 1; % Drop the end..
+      end
+      
+      % Select the middle slices...
+      fieldmaps{p} = fieldmaps{p}(:,:,vstart:vend);
+      fieldmapbrains{p} = fieldmapbrains{p}(:,:,vstart:vend);
+      
+      % Now upsample them.
+      fieldmaps{p} = upsamplematrix(fieldmaps{p},[1 1 2],[],[],'nearest');
+      fieldmapbrains{p} = upsamplematrix(fieldmapbrains{p},[1 1 2],[],[],'nearest');
+    elseif(fieldmapslicefactor>1),
+      % Obtained a low res fieldmap. So we will upsample it...
+      fieldmaps{p} = upsamplematrix(fieldmaps{p},[1 1 fieldmapslicefactor],[],[],'nearest');
+      fieldmapbrains{p} = upsamplematrix(fieldmapbrains{p},[1 1 fieldmapslicefactor],[],[],'nearest');
+      fieldmapsizes{p}(3) = fieldmapsizes{p}(3) / fieldmapslicefactor;
+    end
   end
 end
 fprintf('done (resampling fieldmap data).\n');
